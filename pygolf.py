@@ -1,6 +1,7 @@
 import configparser
 import requests
 import pandas as pd
+import numpy as np
 
 class datagolf:
     """
@@ -29,12 +30,22 @@ class datagolf:
         """
         pass  # TODO
 
-    def connect_api(self):
+    def __connect_api(self, endpoint_name, params):
         """
         Connect to the api.
         """
-        # Generate parameters
-        pass
+        # Define url
+        url = self.base_url + endpoint_name
+
+        # Perform GET request
+        r = requests.get(url, params)
+
+        # Transform request into DataFrame
+        if int(r.status_code) == 200:
+            return pd.DataFrame(r.json())
+        else:
+            print(f'Unable to read {url}, status code = {r.status_code}')
+            return None  
 
     def get_player_list(self):
         """Function to retrieve player list and IDs. Returns the list of players who have played on a "major tour" 
@@ -49,10 +60,8 @@ class datagolf:
             - dg_id: int, datagolf id.
             - player_name: golfer's name.
         """
-
         # Define url
-        player_list_enpdoint_name = 'get-player-list'
-        url = self.base_url + player_list_enpdoint_name
+        endpoint_name = 'get-player-list'
 
         # Setup params for request
         params = {
@@ -60,15 +69,69 @@ class datagolf:
             'file_format': 'json'
         }
 
-        # Perform GET request
-        r = requests.get(url, params)
+        # Call __connect_api function
+        return self.__connect_api(endpoint_name, params)
 
-        # Transform request into DataFrame
-        if int(r.status_code) == 200:
-            return pd.DataFrame(r.json())
-        else:
-            print(f'Unable to read Player List, status code = {r.status_code}')
-            return None
+    def get_tour_schedules(self, tour='pga'):
+        """Current season schedules for the primary tours (PGA, European, KFT). Includes event names/ids, 
+        course names/ids, and location (city/country and latitude, longitude coordinates) data for select 
+        tours.  TODO: expand location into separate columns.
+
+        Parameters
+        ----------
+        tour : {'pga', 'euro', 'kft'}, default='pga'
+            The tour which to retrieve the schedule.
         
+        Returns
+        -------
+        pd.DataFrame with columns:
+            - current_season: int, season which this data is pulled from.
+            - tour: str, golf tour for this data
+            - course: str, course name for this data
+            - course_key: int, identifier for this course
+            - event_id: int, identifier for the particular event
+            - event_name: str, name of the tour event
+            - latitude: float, latitude of the location of the event
+            - longitude: float, longitude of the location of the event
+            - start_date: str, date which the tournament started in '%Y-%m-%d' format
+            - city: str, city where the event took place
+            - state: str, state where the event took place (if applicable)
+            - country: str, country where the event took place
+        """
 
+        # Define url
+        endpoint_name = 'get-schedule'
 
+        # Setup params for request
+        params = {
+            'key': self.api_key,
+            'file_format': 'json',
+            'tour': tour
+        }
+
+        # Call __connect_api function and transform to explode schedule columns
+        schedule = self.__connect_api(endpoint_name, params)
+        course_deets = pd.json_normalize(schedule['schedule'])
+        basic_deets = schedule.drop('schedule', axis=1)
+        df = pd.concat([basic_deets, course_deets], axis=1)  # Combine frames
+        
+        ## Explode location
+        # Find initial regex patterns
+        df['city'] = df['location'].str.extract(r'^([^,]*)')
+        df['us_state'] = df['location'].str.extract(r'([A-Z]{2})')
+        df['other_state'] = df['location'].str.extract(r'^[^,]*,([^,]*),')
+        df['country'] = df['location'].str.extract(r'([^,]*)$')
+
+        # Strip unecessary white space
+        for col in ['city', 'us_state', 'other_state', 'country']:
+            df[col] = df[col].str.strip()
+
+        # Cleanup country and state
+        df['country'] = np.where(df['us_state']==df['country'], 'United States', df['country'])
+        df['state'] = df['us_state'].fillna(df['other_state'])
+
+        # Return all the necessary data
+        cols = ['current_season', 'tour', 'course', 'course_key', 'event_id', 'event_name', 'latitude', 
+                'longitude', 'start_date', 'city', 'state', 'country']
+        return df[cols]
+    
