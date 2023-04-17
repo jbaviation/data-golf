@@ -72,16 +72,19 @@ class datagolf:
         # Call __connect_api function
         return self.__connect_api(endpoint_name, params)
 
-    def get_tour_schedules(self, tour='pga'):
+    def get_tour_schedules(self, tour='pga', explode_location=True):
         """Current season schedules for the primary tours (PGA, European, KFT). Includes event names/ids, 
         course names/ids, and location (city/country and latitude, longitude coordinates) data for select 
-        tours.  TODO: expand location into separate columns.
+        tours.
 
         Parameters
         ----------
         tour : {'pga', 'euro', 'kft'}, default='pga'
             The tour which to retrieve the schedule.
-        
+        explode_location : bool, default=True
+            If true; city, state, and country are attempted to be parsed from the location column. This
+            has had limited testing and it is possible some locations don't parse properly.
+
         Returns
         -------
         pd.DataFrame with columns:
@@ -94,9 +97,10 @@ class datagolf:
             - latitude: float, latitude of the location of the event
             - longitude: float, longitude of the location of the event
             - start_date: str, date which the tournament started in '%Y-%m-%d' format
-            - city: str, city where the event took place
-            - state: str, state where the event took place (if applicable)
-            - country: str, country where the event took place
+            - city: str, city where the event took place (optional)
+            - state: str, state where the event took place (if applicable) (optional)
+            - country: str, country where the event took place (optional)
+            - location: str, full name of the location where the event took place
         """
 
         # Define url
@@ -115,23 +119,26 @@ class datagolf:
         basic_deets = schedule.drop('schedule', axis=1)
         df = pd.concat([basic_deets, course_deets], axis=1)  # Combine frames
         
-        ## Explode location
-        # Find initial regex patterns
-        df['city'] = df['location'].str.extract(r'^([^,]*)')
-        df['us_state'] = df['location'].str.extract(r'([A-Z]{2})')
-        df['other_state'] = df['location'].str.extract(r'^[^,]*,([^,]*),')
-        df['country'] = df['location'].str.extract(r'([^,]*)$')
+        if explode_location:
+            # Find initial regex patterns
+            df['city'] = df['location'].str.extract(r'^([^,]*)')
+            df['us_state'] = df['location'].str.extract(r'\b([A-Z]{2})\b')
+            df['other_state'] = df['location'].str.extract(r'^[^,]*,([^,]*),')
+            df['country'] = df['location'].str.extract(r'([^,]*)$')
 
-        # Strip unecessary white space
-        for col in ['city', 'us_state', 'other_state', 'country']:
-            df[col] = df[col].str.strip()
+            # Strip unecessary white space
+            for col in ['city', 'us_state', 'other_state', 'country']:
+                df[col] = df[col].str.strip()
 
-        # Cleanup country and state
-        df['country'] = np.where(df['us_state']==df['country'], 'United States', df['country'])
-        df['state'] = df['us_state'].fillna(df['other_state'])
+            # Cleanup country and state
+            df['country'] = np.where(df['us_state']==df['country'], 'United States', df['country'])
+            df['state'] = df['us_state'].fillna(df['other_state'])
 
-        # Return all the necessary data
-        cols = ['current_season', 'tour', 'course', 'course_key', 'event_id', 'event_name', 'latitude', 
-                'longitude', 'start_date', 'city', 'state', 'country']
+            # Return all the necessary data
+            cols = ['current_season', 'tour', 'course', 'course_key', 'event_id', 'event_name', 'latitude', 
+                    'longitude', 'start_date', 'city', 'state', 'country', 'location']
+        else:
+            cols = ['current_season', 'tour', 'course', 'course_key', 'event_id', 'event_name', 'latitude', 
+                    'longitude', 'start_date', 'location']
         return df[cols]
     
