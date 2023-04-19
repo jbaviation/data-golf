@@ -47,8 +47,9 @@ class datagolf:
             print(f'Unable to read {url}, status code = {r.status_code}')
             return None  
 
-    def get_player_list(self):
-        """Function to retrieve player list and IDs. Returns the list of players who have played on a "major tour" 
+    def get_player_list(self, explode_name=True):
+        """
+        Function to retrieve player list and IDs. Returns the list of players who have played on a "major tour" 
         since 2018, or are playing on a major tour this week. IDs, country, amateur status included.
 
         Returns
@@ -58,7 +59,10 @@ class datagolf:
             - country: str, golfer's representing country.
             - country_code: str, golfer's representing country's id code.
             - dg_id: int, datagolf id.
-            - player_name: golfer's name.
+            - player_name: golfer's name (if explode_name=False)
+            - first_name: golfer's first name (if explode_name=True)
+            - last_name: golfer's last name (if explode_name=True)
+            - suffix: golfer's suffix (if explode_name=True)
         """
         # Define url
         endpoint_name = 'get-player-list'
@@ -70,7 +74,24 @@ class datagolf:
         }
 
         # Call __connect_api function
-        return self.__connect_api(endpoint_name, params)
+        players = self.__connect_api(endpoint_name, params)
+
+        # Expand name if desired
+        if explode_name:
+            new_cols = ['last_name', 'suffix', 'first_name']
+
+            # Extract pattern for name
+            pat = r'^([^,]+),\s+([A-Za-z.]*,)?([^,]*)$'
+            players[new_cols] = players['player_name'].str.extract(pat)
+
+            # Clean up columns
+            for col in new_cols:
+                players[col] = players[col].fillna('').str.strip().str.replace(',','')
+
+            # Drop player_name column
+            players = players.drop('player_name', axis=1)
+
+        return players
 
     def get_tour_schedules(self, tour='pga', explode_location=True):
         """Current season schedules for the primary tours (PGA, European, KFT). Includes event names/ids, 
