@@ -30,12 +30,15 @@ class datagolf:
         """
         pass  # TODO
 
-    def __connect_api(self, endpoint_name, params):
+    def __connect_api(self, endpoint_name, params, prefix=None):
         """
         Connect to the api.
         """
+        # Determine prefix
+        prefix = '' if prefix is None else prefix.strip('/') + '/'
+
         # Define url
-        url = self.base_url + endpoint_name
+        url = self.base_url + prefix + endpoint_name
 
         # Perform GET request
         r = requests.get(url, params)
@@ -47,10 +50,53 @@ class datagolf:
             print(f'Unable to read {url}, status code = {r.status_code}')
             return None  
 
+    @staticmethod
+    def _parse_name(players, column, drop_column=True):
+        """
+        Splits common full name into first name, last name, and suffix.
+
+        Parameters
+        ----------
+        players : pd.DataFrame
+            DataFrame that has a name column in the proper format for parsing.
+        column : str
+            Name of column that contains player names.
+        drop_column : bool, default=True
+            Whether or not to drop the column that contains the name that's been parsed.
+
+        Returns
+        -------
+        pd.DataFrame
+            Full DataFrame with name column parsed into 3 new columns:
+                - 'first_name'
+                - 'last_name'
+                - 'suffix'
+        """
+        new_cols = ['last_name', 'suffix', 'first_name']
+
+        # Extract pattern for name
+        pat = r'^([^,]+),\s+([A-Za-z.]*,)?([^,]*)$'
+        players[new_cols] = players[column].str.extract(pat)
+
+        # Clean up columns
+        for col in new_cols:
+            players[col] = players[col].fillna('').str.strip().str.replace(',','')
+
+        # Drop player_name column
+        if drop_column:
+            players = players.drop(column, axis=1)
+
+        return players     
+
     def get_player_list(self, explode_name=True):
         """
         Function to retrieve player list and IDs. Returns the list of players who have played on a "major tour" 
         since 2018, or are playing on a major tour this week. IDs, country, amateur status included.
+
+        Parameters
+        ----------
+        explode_name : bool, default=True
+            Expands name into first, last name and suffix.
 
         Returns
         -------
@@ -74,18 +120,7 @@ class datagolf:
 
         # Expand name if desired
         if explode_name:
-            new_cols = ['last_name', 'suffix', 'first_name']
-
-            # Extract pattern for name
-            pat = r'^([^,]+),\s+([A-Za-z.]*,)?([^,]*)$'
-            players[new_cols] = players['player_name'].str.extract(pat)
-
-            # Clean up columns
-            for col in new_cols:
-                players[col] = players[col].fillna('').str.strip().str.replace(',','')
-
-            # Drop player_name column
-            players = players.drop('player_name', axis=1)
+            players = self._parse_name(players, 'player_name', drop_column=True)
 
         return players
 
@@ -185,5 +220,51 @@ class datagolf:
         course_deets = pd.json_normalize(field['field'])
         basic_deets = field.drop(['field', 'event_name'], axis=1)
         df = pd.concat([basic_deets, course_deets], axis=1)
+
+        return df
+    
+    def get_dg_rankings(self, explode_name=True):
+        """
+        Returns the top 500 players in the current DG rankings, along with each player's skill estimate and 
+        respective OWGR rank.
+
+        Parameters
+        ----------
+        explode_name : bool, default=True
+            Expands name into first, last name and suffix.
+
+        Returns
+        -------
+        pd.DataFrame with columns:
+            - last_updated: datetime, last datetime that this dataframe was updated
+            - am: boolean, whether or not next tee time is am
+            - country: str, golfer's representing country's id code.
+            - datagolf_rank: int, datagolf.com's player ranking.
+            - dg_id: int, datagolf id.
+            - dg_skill_estimate: float, datagolf.com's skill ranking.
+            - owgr_rank: int, official world golf ranking.
+            - primary_tour: str, primary golf tour of the player.
+            - player_name: golfer's name (if explode_name=False)
+            - first_name: golfer's first name (if explode_name=True)
+            - last_name: golfer's last name (if explode_name=True)
+            - suffix: golfer's suffix (if explode_name=True)      
+        """
+
+        # Call __connect_api function
+        rankings = self.__connect_api(endpoint_name='get-dg-rankings', 
+                                      params={
+                                        'key': self.api_key,
+                                        'file_format': 'json'},
+                                      prefix='preds'
+                                     )
+        
+        # Combine details
+        player_deets = pd.json_normalize(rankings['rankings'])
+        basic_deets = rankings.drop(['rankings', 'notes'], axis=1)
+        df = pd.concat([basic_deets, player_deets], axis=1)
+
+        # Expand name if desired
+        if explode_name:
+            df = self._parse_name(df, 'player_name', drop_column=True)
 
         return df
