@@ -64,17 +64,13 @@ class datagolf:
             - last_name: golfer's last name (if explode_name=True)
             - suffix: golfer's suffix (if explode_name=True)
         """
-        # Define url
-        endpoint_name = 'get-player-list'
-
-        # Setup params for request
-        params = {
-            'key': self.api_key,
-            'file_format': 'json'
-        }
 
         # Call __connect_api function
-        players = self.__connect_api(endpoint_name, params)
+        players = self.__connect_api(endpoint_name='get-player-list', 
+                                     params={
+                                        'key': self.api_key,
+                                        'file_format': 'json'
+                                     })
 
         # Expand name if desired
         if explode_name:
@@ -94,7 +90,8 @@ class datagolf:
         return players
 
     def get_tour_schedules(self, tour='pga', explode_location=True):
-        """Current season schedules for the primary tours (PGA, European, KFT). Includes event names/ids, 
+        """
+        Current season schedules for the primary tours (PGA, European, KFT). Includes event names/ids, 
         course names/ids, and location (city/country and latitude, longitude coordinates) data for select 
         tours.
 
@@ -124,18 +121,15 @@ class datagolf:
             - location: str, full name of the location where the event took place
         """
 
-        # Define url
-        endpoint_name = 'get-schedule'
+        # Call __connect_api function
+        schedule = self.__connect_api(endpoint_name='get-schedule', 
+                                      params={
+                                        'key': self.api_key,
+                                        'file_format': 'json',
+                                        'tour': tour
+                                      })
 
-        # Setup params for request
-        params = {
-            'key': self.api_key,
-            'file_format': 'json',
-            'tour': tour
-        }
-
-        # Call __connect_api function and transform to explode schedule columns
-        schedule = self.__connect_api(endpoint_name, params)
+        # Combine details
         course_deets = pd.json_normalize(schedule['schedule'])
         basic_deets = schedule.drop('schedule', axis=1)
         df = pd.concat([basic_deets, course_deets], axis=1)  # Combine frames
@@ -163,3 +157,33 @@ class datagolf:
                     'longitude', 'start_date', 'location']
         return df[cols]
     
+    def get_field_updates(self, tour='pga'):
+        """
+        Up-to-the-minute field updates on WDs, Monday Qualifiers, tee times, and fantasy salaries for PGA Tour, 
+        European Tour, and Korn Ferry Tour events. Includes data golf IDs and tour-specific IDs for each player 
+        in the field.
+
+        Parameters
+        ----------
+        tour : {'pga', 'euro', 'kft'}, default='pga'
+            The tour which to retrieve the schedule.
+
+        Returns
+        -------
+        pd.DataFrame
+            Columns vary depending on the event that is being retrieved.
+        """
+        # Call __connect_api function
+        field = self.__connect_api(endpoint_name='field-updates', 
+                                   params={
+                                        'key': self.api_key,
+                                        'file_format': 'json',
+                                        'tour': tour
+                                    })
+        
+        # Combine details
+        course_deets = pd.json_normalize(field['field'])
+        basic_deets = field.drop(['field', 'event_name'], axis=1)
+        df = pd.concat([basic_deets, course_deets], axis=1)
+
+        return df
