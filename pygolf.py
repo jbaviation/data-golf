@@ -44,15 +44,16 @@ class datagolf:
         r = requests.get(url, params)
 
         # Transform request into DataFrame
-        if int(r.status_code) == 200:
+        if (r is None) or (r.status_code != 200):
+            base_msg = 'Issue occurred with the request for {}. Status code {} encountered.'
+            msg = base_msg.format(endpoint_name, None) if r is None else base_msg.format(endpoint_name, r.status_code)
+            raise DataGolfAPIResponseError(msg)
+        
         # Consider if request is to be returned
-            if return_request:
-                return r
-            else:
-                return pd.DataFrame(r.json())
+        if return_request:
+            return r
         else:
-            print(f'Unable to read {url}, status code = {r.status_code}')
-            return None  
+            return pd.DataFrame(r.json())
 
     @staticmethod
     def _parse_name(players, column, drop_column=True):
@@ -273,13 +274,14 @@ class datagolf:
 
         return df
     
-    def get_pre_tourney_predictions(self, add_position=None, tour='pga', odds_format='percent'):
+    def get_pre_tourney_predictions(self, add_position=None, tour='pga', odds_format='percent', event_id=None,
+                                    year=None):
         """
         Get full-field probabilistic forecasts for upcoming tournaments.
 
         The forecasts for the upcoming tournaments include those for the PGA, European, and Korn Ferry Tour and
         from both datagolf baseline and baseline + course history & fit models. Probabilities provided for 
-        various finish positions (make cut, top 20, top 5, win, etc.).
+        various finish positions (make cut, top 20, top 5, win, etc).
 
         Parameters
         ----------
@@ -291,6 +293,12 @@ class datagolf:
             Specifies the tour.
         odds_format : {'percent', 'american', 'decimal', 'fraction'}, default='percent'
             Specifies the odds format.
+        event_id : int, optional
+            Unique event id (if specific event is requested). If no input is provided, the event defaults
+            to the most current event. NOTE: additional API permissions may be required to perform this action.
+        year : int {>=2020}, optional
+            Specifies the calendar year (not season) of the event. If no input is provided, defaults to only
+            the most current event. NOTE: additional API permissions may be required to perform this action.
 
         Returns
         -------
@@ -309,11 +317,11 @@ class datagolf:
             - win : [type depends on 'odds_format' input], odds of winning
             - {any selected 'add_position' values}
         """
+
         # Generate params input
         params = {
             'key': self.api_key,
             'file_format': 'csv',
-            'tour': tour,
             'odds_format': odds_format
         }
 
@@ -322,15 +330,22 @@ class datagolf:
             pass  # don't do anything if optional input is not entered
         else:  # Temporary disallow any inputs into add_position
             raise DataGolfAPIInputError('add_position into get_pre_tourney_predictions is temporariily unavailable')
-        
         # elif isinstance(add_position, (list, tuple)):
         #     add_position_str = [str(pos) for pos in add_position]
         #     params['add_position'] = ','.join(add_position_str)
         # else:
         #     raise DataGolfAPIInputError('Improper entry into get_pre_tourney_predictions add_position input')
 
+        # Set endpoint and params (it can change depending on inputs)
+        endpoint_name = 'pre-tournament-archive' if (event_id or year) else 'pre-tournament'
+        if endpoint_name=='pre-tournament':
+            params['tour'] = tour
+        else:
+            if event_id: params['event_id'] = str(event_id)
+            if year: params['year'] = str(year)
+
         # Call __connect_api function
-        predicts_req = self.__connect_api(endpoint_name='pre-tournament', 
+        predicts_req = self.__connect_api(endpoint_name=endpoint_name, 
                                           params=params, 
                                           prefix='preds',
                                           return_request=True
@@ -340,6 +355,11 @@ class datagolf:
         csv_list = [row.split(',') for row in predicts_req.content.decode("utf-8").split('\n')]
         return pd.DataFrame(csv_list[1:], columns=csv_list[0])  # set first row as column header
 
+
 class DataGolfAPIInputError(Exception):
     """Custom exception for issues with input into the Datagolf API"""
+    pass
+
+class DataGolfAPIResponseError(Exception):
+    """Custom exception for issues with unrecognized response from the API."""
     pass
