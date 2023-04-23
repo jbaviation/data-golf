@@ -476,6 +476,97 @@ class datagolf:
 
         return df
 
+    def get_approach_skill(self, period='l24', explode_name=True):
+        """
+        Returns detailed player-level approach performance stats (strokes-gained per shot, proximity, GIR, 
+        good shot rate, poor shot avoidance rate) across various yardage/lie buckets.
+
+        Parameters
+        ----------
+        period : {'l[number months]'}, default='l24'
+            Specifies time period to sample over. Defaults to last 24 months 'l24'.
+        explode_name : bool, default=True
+            Expands name into first, last name and suffix.
+
+        Returns
+        -------
+        pd.DataFrame with columns
+            - last_updated : datetime, last datetime that this dataframe was updated
+            - time_period  : float, TODO
+            - 100_150_fw_gir_rate : float, TODO
+            - 100_150_fw_good_shot_rate : float, TODO
+            - 100_150_fw_low_data_indicator : float, TODO
+            - 100_150_fw_poor_shot_avoid_rate : float, TODO
+            - 100_150_fw_proximity_per_shot : float, TODO
+            - 100_150_fw_sg_per_shot : float, TODO
+            - 100_150_fw_shot_count : float, TODO
+            - 150_200_fw_gir_rate : float, TODO
+            - 150_200_fw_good_shot_rate : float, TODO
+            - 150_200_fw_low_data_indicator : float, TODO
+            - 150_200_fw_poor_shot_avoid_rate : float, TODO
+            - 150_200_fw_proximity_per_shot : float, TODO
+            - 150_200_fw_sg_per_shot : float, TODO
+            - 150_200_fw_shot_count : float, TODO
+            - 50_100_fw_gir_rate : float, TODO
+            - 50_100_fw_good_shot_rate : float, TODO
+            - 50_100_fw_low_data_indicator : float, TODO
+            - 50_100_fw_poor_shot_avoid_rate : float, TODO
+            - 50_100_fw_proximity_per_shot : float, TODO
+            - 50_100_fw_sg_per_shot : float, TODO
+            - 50_100_fw_shot_count : float, TODO
+            - dg_id : int, datagolf id
+            - over_150_rgh_gir_rate : float, TODO
+            - over_150_rgh_good_shot_rate : float, TODO
+            - over_150_rgh_low_data_indicator : float, TODO
+            - over_150_rgh_poor_shot_avoid_rate : float, TODO
+            - over_150_rgh_proximity_per_shot : float, TODO
+            - over_150_rgh_sg_per_shot : float, TODO
+            - over_150_rgh_shot_count : float, TODO
+            - over_200_fw_gir_rate : float, TODO
+            - over_200_fw_good_shot_rate : float, TODO
+            - over_200_fw_low_data_indicator : float, TODO
+            - over_200_fw_poor_shot_avoid_rate : float, TODO
+            - over_200_fw_proximity_per_shot : float, TODO
+            - over_200_fw_sg_per_shot : float, TODO
+            - over_200_fw_shot_count : float, TODO
+            - under_150_rgh_gir_rate : float, TODO
+            - under_150_rgh_good_shot_rate : float, TODO
+            - under_150_rgh_low_data_indicator : float, TODO
+            - under_150_rgh_poor_shot_avoid_rate : float, TODO
+            - under_150_rgh_proximity_per_shot : float, TODO
+            - under_150_rgh_sg_per_shot : float, TODO
+            - under_150_rgh_shot_count : float, TODO
+            - player_name: golfer's name (if explode_name=False)
+            - first_name: golfer's first name (if explode_name=True)
+            - last_name: golfer's last name (if explode_name=True)
+            - suffix: golfer's suffix (if explode_name=True)
+        """
+        # Generate params and endpoint
+        endpoint = 'approach-skill'
+        params = {
+            'key': self.api_key,
+            'period': period,
+            'file_format': 'json'
+        }
+
+        # Call __connect_api function
+        players = self.__connect_api(endpoint_name=endpoint,
+                                     params=params,
+                                     prefix='preds'
+        )
+
+        # Combine details
+        player_deets = pd.json_normalize(players['data'])
+        basic_deets = players.drop(['data'], axis=1)
+        df = pd.concat([basic_deets, player_deets], axis=1)
+
+        # Expand name if desired
+        if explode_name:
+            df = self._parse_name(df, 'player_name', drop_column=True)
+
+        return df
+
+
 class DataGolfAPIInputError(Exception):
     """Custom exception for issues with input into the Datagolf API"""
     pass
