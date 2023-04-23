@@ -368,7 +368,7 @@ class datagolf:
 
         Returns
         -------
-        pd.DataFrame with columns (NOTE: some columns vary based on the event)
+        pd.DataFrame with columns
             - course_name : str, name of the course
             - event_name : str, name of the event
             - last_updated : datetime, last datetime that this dataframe was updated
@@ -416,6 +416,58 @@ class datagolf:
         # Combine details
         player_deets = pd.json_normalize(players['players'])
         basic_deets = players.drop(['players', 'notes'], axis=1)
+        df = pd.concat([basic_deets, player_deets], axis=1)
+
+        # Expand name if desired
+        if explode_name:
+            df = self._parse_name(df, 'player_name', drop_column=True)
+
+        return df
+
+    def get_player_skill_ratings(self, explode_name=True):
+        """
+        Returns our estimate and rank for each skill for all players with sufficient Shotlink measured rounds 
+        (at least 30 rounds in the last year or 50 in the last 2 years).
+
+        Parameters
+        ----------
+        explode_name : bool, default=True
+            Expands name into first, last name and suffix.
+
+        Returns
+        -------
+        pd.DataFrame with columns
+            - last_updated : datetime, last datetime that this dataframe was updated
+            - dg_id : int, datagolf id
+            - driving_acc : float, TODO
+            - driving_dist : float, TODO
+            - sg_app : float, player shots gained "Approach to Green"
+            - sg_arg : float, player shots gained "Around the Green"
+            - sg_ott : float, player shots gained "Off the Tee"
+            - sg_putt : float, player shots gained "Putting"
+            - sg_total : float, player combined shots gained
+            - player_name: golfer's name (if explode_name=False)
+            - first_name: golfer's first name (if explode_name=True)
+            - last_name: golfer's last name (if explode_name=True)
+            - suffix: golfer's suffix (if explode_name=True)
+        """
+        # Generate params and endpoint
+        endpoint = 'skill-ratings'
+        params = {
+            'key': self.api_key,
+            'display': 'value',
+            'file_format': 'json'
+        }
+
+        # Call __connect_api function
+        players = self.__connect_api(endpoint_name=endpoint,
+                                     params=params,
+                                     prefix='preds'
+        )
+
+        # Combine details
+        player_deets = pd.json_normalize(players['players'])
+        basic_deets = players.drop(['players'], axis=1)
         df = pd.concat([basic_deets, player_deets], axis=1)
 
         # Expand name if desired
