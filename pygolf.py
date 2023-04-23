@@ -355,6 +355,74 @@ class datagolf:
         csv_list = [row.split(',') for row in predicts_req.content.decode("utf-8").split('\n')]
         return pd.DataFrame(csv_list[1:], columns=csv_list[0])  # set first row as column header
 
+    def get_player_decompositions(self, tour='pga', explode_name=True):
+        """
+        Returns a detailed breakdown of every player's strokes-gained prediction for upcoming tournaments.
+
+        Parameters
+        ----------
+        tour : {'pga', 'euro', 'kft', 'opp', 'alt'}, default='pga'
+            Specifies the tour.
+        explode_name : bool, default=True
+            Expands name into first, last name and suffix.
+
+        Returns
+        -------
+        pd.DataFrame with columns (NOTE: some columns vary based on the event)
+            - course_name : str, name of the course
+            - event_name : str, name of the event
+            - last_updated : datetime, last datetime that this dataframe was updated
+            - age : int, age of the player during the event
+            - age_adjustment : float, strokes gained adjustment for age
+            - am : int, whether or not the player is an amateur
+            - baseline_pred : float, TODO
+            - cf_approach_comp : float, TODO
+            - cf_short_comp : float, TODO
+            - country: str, golfer's representing country's id code.
+            - country_adjustment : TODO
+            - course_experience_adjustment : float, strokes gained adjustment for course experience
+            - course_history_adjustment : float, strokes gained adjustment for course history
+            - dg_id : int, datagolf id
+            - driving_accuracy_adjustment : float, strokes gained adjustment for driving accuracy
+            - driving_distance_adjustment : float, strokes gained adjustment for driving distance
+            - final_pred : float, total strokes gained prediction for this event? TODO
+            - other_fit_adjustment : float, TODO
+            - sample_size : int, TODO
+            - std_deviation : float, TODO
+            - strokes_gained_category_adjustment : float, TODO
+            - timing_adjustment : float, TODO
+            - total_course_history_adjustment : float, TODO
+            - total_fit_adjustment : float, TODO
+            - true_sg_adjustments : float, TODO
+            - player_name: golfer's name (if explode_name=False)
+            - first_name: golfer's first name (if explode_name=True)
+            - last_name: golfer's last name (if explode_name=True)
+            - suffix: golfer's suffix (if explode_name=True) 
+        """
+        # Generate params and endpoint
+        endpoint = 'player-decompositions'
+        params = {
+            'key': self.api_key,
+            'file_format': 'json',
+            'tour': tour
+        }
+
+        # Call __connect_api function
+        players = self.__connect_api(endpoint_name=endpoint,
+                                     params=params,
+                                     prefix='preds'
+        )
+
+        # Combine details
+        player_deets = pd.json_normalize(players['players'])
+        basic_deets = players.drop(['players', 'notes'], axis=1)
+        df = pd.concat([basic_deets, player_deets], axis=1)
+
+        # Expand name if desired
+        if explode_name:
+            df = self._parse_name(df, 'player_name', drop_column=True)
+
+        return df
 
 class DataGolfAPIInputError(Exception):
     """Custom exception for issues with input into the Datagolf API"""
