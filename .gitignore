@@ -1,2 +1,5 @@
 # Secret files
 config.ini
+
+# Cached files/folders
+__pycache__/

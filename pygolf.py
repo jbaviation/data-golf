@@ -566,6 +566,128 @@ class datagolf:
 
         return df
 
+    def get_fantasy(self, tour='pga', site=None, slate='main', explode_name=True, include_notes=False):
+        """
+        Parameters
+        ----------
+        tour : {'pga', 'euro', 'kft', 'opp', 'alt'}, default='pga'
+            Specifies the tour.
+        site : {'draftkings', 'fanduel', 'yahoo'}, default='draftkings'
+            Specifies the site in which the fantasy data is applied.
+        slate : {'main', 'showdown', 'showdown_late', 'weekend', 'captain'}, default='main'
+            Specifies the slate. Non 'main' slates are only available for site='draftkings'.
+        explode_name : bool, default=True
+            Expands name into first, last name and suffix.
+        include_notes : bool, default=False
+            Whether or not to include the `note` key returned from the api call. Usually this note
+            does not contain critical information related to the predictions and, therefore, this
+            input defaults to False
+
+        Returns
+        -------
+        pd.DataFrame with columns
+            - event_name: str, tour event name
+            - last_updated : datetime, last datetime that this dataframe was updated
+            - note : str, notes about the call to the api (if `include_notes`=True)
+            - site : str, dfs site applicable to this analysis
+            - slate : str, dfs site slate applicable to this analysis
+            - tour : str, tour for this analysis
+            - dg_id : int, datagolf id
+            - early_late_wave : int, starting wave. 1=(day 1 early, day 2 late)
+            - player_name: golfer's name (if explode_name=False)
+            - first_name: golfer's first name (if explode_name=True)
+            - last_name: golfer's last name (if explode_name=True)
+            - suffix: golfer's suffix (if explode_name=True)
+            - proj_ownership: float, model projected ownership percentage
+            - proj_points: float, model projected points during tournament
+            - r1_teetime: str, round 1 tee time
+            - salary: int, player salary
+            - site_name_id: str, UNSURE OF THE PURPOSE FOR COLUMN
+        """
+        
+        # Generate params and endpoint
+        endpoint = 'fantasy-projection-defaults'
+        params = {
+            'key': self.api_key,
+            'tour': tour,
+            'site': site,
+            'slate': slate,
+            'file_format': 'json'
+        }
+
+        # Call __connect_api function
+        players = self.__connect_api(endpoint_name=endpoint,
+                                     params=params,
+                                     prefix='preds'
+        )
+
+        # Combine details
+        player_deets = pd.json_normalize(players['projections'])
+        basic_deets = players.drop(['projections'], axis=1)
+        df = pd.concat([basic_deets, player_deets], axis=1)
+
+        # Expand name if desired
+        if explode_name:
+            df = self._parse_name(df, 'player_name', drop_column=True)
+
+        if ~include_notes:
+            df = df.drop('note', axis=1)
+
+        return df
+
+    # def get_live_model_predictions(self, tour='pga', dead_heat=False, odds_format='percent'):
+    #     """
+    #     Returns live (updating at 5 minute intervals) finish probabilities for ongoing PGA and European Tour tournaments.
+
+    #     The data from this method corresponds to Live Predictive Model page https://datagolf.com/live-model/pga-tour
+
+    #     Parameters
+    #     ----------
+    #     tour : {'pga', 'euro', 'kft', 'opp', 'alt'}, default='pga'
+    #         Specifies the tour.
+    #     dead_heat : bool or {'yes', 'no'}, default=False
+    #         Whether or not to adjust for dead-heat rules. Dead head explanation:
+    #         The simplest bet types are those where you receive a payout equal to the offered odds if you win, and 
+    #         receive nothing otherwise. This payout structure exists for matchup bets where a separate bet for a tie 
+    #         is offered, for example. However, for bets on finish positions (e.g. to finish in the Top 20), for 3-balls, 
+    #         and for some other bet types, 'dead-heat' rules typically apply. These rules specify the payout in the event 
+    #         of ties between golfers. In a 3-ball, if there is a tie for low score (between 2, or all 3, of the golfers), 
+    #         the payout you receive will be divided by the number of golfers involved in the tie; if you bet 1 unit on 
+    #         golfer A at European odds of 4.0, and there is a 3-way tie in the 3-ball, your payout will be equal to 4/3, 
+    #         for a profit of 4/3 - 1 = 0.33 units. For finish position bets, the same logic applies: if 2 golfers tie for 
+    #         20th place the payout will be halved; if 7 golfers tied for 17th place, the payout would be equal to 4/7 of 
+    #         the full bet. More generally, the fraction to be paid out is equal to (num positions paid)/(num golfers tied). 
+    #         The expected value calculations in the Scratch Tools for 3-balls and finish position bets take into account 
+    #         dead-heat rules.
+    #     odds_format : {'percent', 'american', 'decimal', 'fraction'}, default='percent'
+    #         Specifies the odds format.
+
+    #     Returns
+    #     -------
+    #     pd.DataFrame with columns
+    #         - course_name : str, name of the course
+
+    #     """
+    #     # https://feeds.datagolf.com/preds/in-play?tour=[ tour ]&dead_heat=[ dead_heat ]&odds_format=[ odds_format ]&file_format=[ file_format ]&key=502b38149b492f7ad148e0f20e83
+
+    #     # Generate params and endpoint
+    #     endpoint = 'approach-skill'
+    #     params = {
+    #         'key': self.api_key,
+    #         'tour': tour,
+    #         'site': site,
+    #         'slate': slate,
+    #         'file_format': 'json'
+    #     }
+
+    #     # Call __connect_api function
+    #     players = self.__connect_api(endpoint_name=endpoint,
+    #                                  params=params,
+    #                                  prefix='preds'
+    #     )        
+
+## NEED TO STASH THE RETURNING DATAFRAMES TO LIMIT THE NEED FOR API REQUESTS.
+
 
 class DataGolfAPIInputError(Exception):
     """Custom exception for issues with input into the Datagolf API"""
@@ -574,3 +696,11 @@ class DataGolfAPIInputError(Exception):
 class DataGolfAPIResponseError(Exception):
     """Custom exception for issues with unrecognized response from the API."""
     pass
+
+
+"""
+Running list of questions for datagolf admins
+---------------------------------------------
+- API tour does not accept LIV but it is available on website...is that functionality coming?
+- pre-tournament endpoint is not accepting add_position. Needs better example options if possible
+"""
